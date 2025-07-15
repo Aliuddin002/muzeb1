@@ -2,14 +2,14 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { SongList } from "@/components/song/SongList";
 import { getSongs, getSongById } from "@/services/fma";
 import type { Song } from "@/types";
 import { Loader2, SearchX } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-export default function SearchResultsPage() {
+function SearchResults() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q");
   const songIdsParam = searchParams.get("ids");
@@ -31,10 +31,11 @@ export default function SearchResultsPage() {
            const songs = (await Promise.all(songPromises)).filter((s): s is Song => s !== undefined);
            setSearchResults(songs);
         } else if (query) {
-          const songs = await getSongs({ query });
-          setSearchResults(songs);
+          const result = await getSongs({ query });
+          setSearchResults(result.songs);
         }
       } catch (err: any) {
+        console.error("Search fetch error:", err);
         setError(err);
         setSearchResults([]);
       } finally {
@@ -46,6 +47,7 @@ export default function SearchResultsPage() {
         fetchResults();
     } else {
         setIsLoading(false);
+        setSearchResults([]);
     }
   }, [query, songIdsParam]);
 
@@ -88,4 +90,13 @@ export default function SearchResultsPage() {
       )}
     </section>
   );
+}
+
+
+export default function SearchResultsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SearchResults />
+    </Suspense>
+  )
 }
