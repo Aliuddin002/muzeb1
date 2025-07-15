@@ -8,7 +8,8 @@ import {
   startAfter as firestoreStartAfter,
   orderBy,
   QueryDocumentSnapshot,
-  DocumentData
+  DocumentData,
+  where
 } from 'firebase/firestore';
 
 import {db} from '@/lib/firebase';
@@ -90,18 +91,21 @@ function docToSong(doc: QueryDocumentSnapshot<DocumentData>): Song {
 export async function getSongs(
   searchParams?: SongSearchParams
 ): Promise<PaginatedSongs> {
-  // If there's a search query, we fetch all and filter client-side.
-  // This does not support pagination and is not ideal for very large datasets.
+  // If there's a search query, fetch all and filter client-side.
   if (searchParams?.query) {
+    // This is not ideal for large datasets but works for this project's scale.
+    // For a production app with a large dataset, a dedicated search service like
+    // Algolia or Elasticsearch would be better.
     const querySnapshot = await getDocs(songsCollection);
-    let songs = querySnapshot.docs.map(docToSong);
     const searchTerm = searchParams.query.toLowerCase();
-    songs = songs.filter(
-      (song) =>
-        song.title.toLowerCase().includes(searchTerm) ||
-        song.artist.toLowerCase().includes(searchTerm)
-    );
-    return { songs, lastVisible: undefined }; // No lastVisible for search
+    const songs = querySnapshot.docs
+      .map(docToSong)
+      .filter(
+        (song) =>
+          song.title.toLowerCase().includes(searchTerm) ||
+          song.artist.toLowerCase().includes(searchTerm)
+      );
+    return { songs: songs.slice(0, 50), lastVisible: undefined }; // No pagination for search, limit to 50 results
   }
   
   // If no search query, build a paginated query.
@@ -130,6 +134,12 @@ export async function getSongById(id: string): Promise<Song | undefined> {
   if (docSnap.exists()) {
     return docToSong(docSnap as QueryDocumentSnapshot<DocumentData>);
   } else {
+    // Fallback for cases where ID might be a number string from the old dataset
+    const q = query(songsCollection, where('track_id', '==', parseInt(id, 10)));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        return docToSong(querySnapshot.docs[0]);
+    }
     return undefined;
   }
 }
